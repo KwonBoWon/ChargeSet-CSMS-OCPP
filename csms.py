@@ -6,7 +6,7 @@ from warnings import catch_warnings
 
 from central_system import ChargePointHandler
 import http
-import websockets_test
+import websockets
 import ssl
 from pathlib import Path
 import argparse
@@ -86,7 +86,7 @@ async def on_connect(websocket, path):
         logging.info(f"{charge_point_id} connected using OCPP2.0.1")
         try:
             await cp.start()
-        except websockets_test.exceptions.ConnectionClosedOK:
+        except websockets.exceptions.ConnectionClosedOK:
             logging.info("Client closed the connection normally (code 1000).")
 
 
@@ -111,7 +111,7 @@ async def main():
     global reject_auth
     reject_auth = args.reject_auth
 
-    server = await websockets_test.serve(
+    server = await websockets.serve(
         on_connect, host, port, subprotocols=["ocpp2.0.1"], process_request=process_request
     )
 

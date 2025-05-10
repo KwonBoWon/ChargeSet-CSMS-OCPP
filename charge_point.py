@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import websockets
-import websockets_test
 
 from ocpp.v201 import ChargePoint as CP
 from ocpp.v201 import call, call_result
@@ -117,7 +116,7 @@ class ChargePoint201(CP):
 async def run_cp(cp):
     try:
         await cp.start()
-    except websockets_test.exceptions.ConnectionClosedOK:
+    except websockets.exceptions.ConnectionClosedOK:
         print("연결이 정상적으로 종료되었습니다.")
 
 async def authorize_transaction(cp):
@@ -134,7 +133,7 @@ async def authorize_transaction(cp):
 async def main():
     uri = "ws://localhost:9000/CP_01"
 
-    async with websockets_test.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
+    async with websockets.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
         cp = ChargePoint201("CP_01", ws)
 
         asyncio.create_task(run_cp(cp))
@@ -150,18 +149,18 @@ async def main():
         await cp.stop_transaction()
         await asyncio.sleep(10)
         """
-"""
+
     async with websockets.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
         cp2 = ChargePoint201("CP_02", ws)
 
         asyncio.create_task(run_cp(cp2))
 
         await asyncio.sleep(1)
-        await cp.send_boot_notification()
+        await cp2.send_boot_notification()
         await asyncio.sleep(1)
-        await cp.send_authorize()
+        await cp2.send_authorize()
         await asyncio.sleep(1)
-"""
+
 
 
 
