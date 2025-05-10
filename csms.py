@@ -18,30 +18,6 @@ from pymongo import MongoClient
 __version__ = "0.1.0"
 
 reject_auth = False
-"""
-{
-  "_id": {
-    "$oid": "67fb7450fcb584c29e147773"
-  },
-  "stationId": "ST-001",
-  "evseId": "EVSE-ST1-001",
-  "connectorId": 1,
-  "idToken": "token-3456",
-  "startTime": {
-    "$date": "2025-04-14T13:00:00.000Z"
-  },
-  "endTime": {
-    "$date": "2025-04-14T20:00:00.000Z"
-  },
-  "targetEnergyWh": 15000,
-  "reservationStatus": "ACTIVE",
-  "createdAt": {
-    "$date": "2025-04-12T09:00:00.000Z"
-  },
-  "userId": "67dfc4c4dbbe444d632a2421"
-}
-"""
-
 
 async def process_request(connection, request):
     logging.info(f'request:\n{request}')

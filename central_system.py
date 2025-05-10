@@ -120,8 +120,8 @@ class ChargePointHandler(cp):
         # TODO: 충전소 위치 확인, 커넥터 확인, 스타트타임 확인 -> 업데이트 해줘야함(예약시간 지남)
         else:
             print("reservation found")
-            reservation_id = reservation_data["_id"] # 예약 id
-            charging_profile = charging_profile_collection.find_one({"reservationId": reservation_id.toString()})
+            reservation_id = str(reservation_data["_id"]) # 예약 id
+            charging_profile = charging_profile_collection.find_one({"reservationId": reservation_id})
             print(reservation_id)
             print("chargingProfile found")
             print(charging_profile)
