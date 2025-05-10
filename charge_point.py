@@ -119,47 +119,49 @@ async def run_cp(cp):
     except websockets.exceptions.ConnectionClosedOK:
         print("연결이 정상적으로 종료되었습니다.")
 
-async def authorize_transaction(cp):
-    try:
-        await asyncio.sleep(1)
-        await cp.send_authorize()
-        await asyncio.sleep(1)
-    except Exception as e:
-        print(f"An error occurred in authorize_transaction: {e}")
-
-
-
-
-async def main():
-    uri = "ws://localhost:9000/CP_01"
-
+async def charge_point_manager(uri, cp_name):
     async with websockets.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
-        cp = ChargePoint201("CP_01", ws)
-
+        cp = ChargePoint201(cp_name, ws)
         asyncio.create_task(run_cp(cp))
-
         await asyncio.sleep(1)
         await cp.send_boot_notification()
         await asyncio.sleep(1)
-        await cp.send_authorize()
-        await asyncio.sleep(1)
+
+        print(f"ChargeStation {cp_name} is ready to charge.")
+
+        while True:
+            command = await asyncio.to_thread(input, f"Enter command for {cp_name} (start/stop/exit): ")
+            command = command.strip()
+            if command == "start":
+                print(f"Starting transaction for {cp_name}...")
+                await cp.start_transaction()
+            elif command == "stop":
+                print(f"Stopping transaction for {cp_name}...")
+                await cp.stop_transaction()
+            elif command == "exit":
+                print(f"Exiting {cp_name} management...")
+                break
+            else:
+                print("Unknown command. Please use 'start', 'stop', or 'exit'.")
+
         """
+        await cp.send_authorize()
         await cp.start_transaction()
         await asyncio.sleep(5)
         await cp.stop_transaction()
         await asyncio.sleep(10)
         """
 
-    async with websockets.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
-        cp2 = ChargePoint201("CP_02", ws)
 
-        asyncio.create_task(run_cp(cp2))
 
-        await asyncio.sleep(1)
-        await cp2.send_boot_notification()
-        await asyncio.sleep(1)
-        await cp2.send_authorize()
-        await asyncio.sleep(1)
+
+async def main():
+    uri = "ws://localhost:9000/"
+
+    await asyncio.gather(
+        charge_point_manager(uri + "CP_01", "CP_01"),
+        #charge_point_manager(uri + "CP_02", "CP_02"),
+    )
 
 
 
