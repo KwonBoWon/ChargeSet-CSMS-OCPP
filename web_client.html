@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OCPP 2.0.1 Web Client</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    #status { font-weight: bold; }
+    textarea { width: 100%; height: 200px; margin-top: 10px; }
+    button { margin-right: 10px; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <h2>🔌 OCPP 2.0.1 Web Client</h2>
+
+  <label>
+    Charge Point ID:
+    <input id="cpId" type="text" value="CP_001">
+  </label>
+  <button onclick="connect()">Connect</button>
+  <p>Status: <span id="status">Disconnected</span></p>
+
+  <h3>📤 Commands</h3>
+  <button onclick="sendBootNotification()">Send BootNotification</button>
+  <button onclick="sendHeartbeat()">Send Heartbeat</button>
+  <button onclick="startTransaction()">Start Transaction</button>
+  <button onclick="stopTransaction()">Stop Transaction</button>
+
+  <h3>📨 Messages</h3>
+  <textarea id="log" readonly></textarea>
+
+  <script>
+    let socket = null;
+    let messageId = 1;
+    let transactionId = null;
+    let evseId = 1;
+    let connectorId = 1;
+
+    function log(msg) {
+      const logBox = document.getElementById("log");
+      logBox.value += msg + "\n";
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function connect() {
+      const cpId = document.getElementById("cpId").value;
+      const url = `ws://localhost:9000/${cpId}`;
+      const protocol = "ocpp2.0.1";
+
+      socket = new WebSocket(url, protocol);
+
+      socket.onopen = () => {
+        document.getElementById("status").innerText = "Connected";
+        log("[✅] Connected");
+
+        sendBootNotification();
+      };
+
+      socket.onmessage = (event) => {
+        log("[⬅️] " + event.data);
+      };
+
+      socket.onclose = () => {
+        document.getElementById("status").innerText = "Disconnected";
+        log("[🔌] Connection closed");
+      };
+
+      socket.onerror = (error) => {
+        log("[❌] Error: " + error);
+      };
+    }
+
+    function sendBootNotification() {
+      const msg = [
+        2,
+        String(messageId++),
+        "BootNotification",
+        {
+          chargingStation: {
+            model: "Model X",
+            vendorName: "MyEV",
+          },
+          reason: "PowerUp"
+        }
+      ];
+      socket.send(JSON.stringify(msg));
+      log("[➡️] BootNotification sent");
+    }
+
+    function sendHeartbeat() {
+      const msg = [
+        2,
+        String(messageId++),
+        "Heartbeat",
+        {}
+      ];
+      socket.send(JSON.stringify(msg));
+      log("[➡️] Heartbeat sent");
+    }
+
+    function startTransaction() {
+      transactionId = "tx-" + Date.now();
+      const msg = [
+        2,
+        String(messageId++),
+        "TransactionEvent",
+        {
+          eventType: "Started",
+          timestamp: new Date().toISOString(),
+          triggerReason: "Authorized",
+          seqNo: 1,
+          transactionInfo: {
+            transactionId: transactionId
+          },
+          evse: {
+            id: evseId,
+            connectorId: connectorId
+          },
+          idToken: {
+            idToken: "token-3456",
+            type: "KeyCode"
+          }
+        }
+      ];
+      socket.send(JSON.stringify(msg));
+      log("[➡️] TransactionEvent (Started) sent");
+    }
+
+    function stopTransaction() {
+      if (!transactionId) {
+        log("[⚠️] No active transaction.");
+        return;
+      }
+
+      const msg = [
+        2,
+        String(messageId++),
+        "TransactionEvent",
+        {
+          eventType: "Ended",
+          timestamp: new Date().toISOString(),
+          triggerReason: "StopAuthorized",
+          seqNo: 2,
+          transactionInfo: {
+            transactionId: transactionId,
+            stoppedReason: "EVDisconnected"
+          },
+          evse: {
+            id: evseId,
+            connectorId: connectorId
+          },
+          idToken: {
+            idToken: "token-3456",
+            type: "KeyCode"
+          },
+          meterValue: [
+            {
+              timestamp: new Date().toISOString(),
+              sampledValue: [{
+                value: 15.3,
+                measurand: "Energy.Active.Import.Register",
+                unitOfMeasure: {
+                  unit: "Wh"
+                }
+              }]
+            }
+          ]
+        }
+      ];
+      socket.send(JSON.stringify(msg));
+      log("[➡️] TransactionEvent (Ended) sent");
+
+      transactionId = null;
+    }
+  </script>
+</body>
+</html>
