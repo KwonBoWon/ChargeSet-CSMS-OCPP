@@ -6,6 +6,7 @@ from ocpp.v201 import ChargePoint as CP
 from ocpp.v201 import call, call_result
 from ocpp.routing import on
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 from ocpp.v201.enums import (
     Action,
     RegistrationStatusEnumType,
@@ -18,29 +19,9 @@ from ocpp.v201.enums import (
 
 
 class ChargePoint201(CP):
+    def __init__(self, id, ws):
+        super().__init__(id, ws)
 
-    @on('GetVariables')
-    async def on_get_variables(self, get_variable_data, **kwargs):
-        print("GetVariables 요청 수신:", get_variable_data)
-        return call_result.GetVariables(
-            get_variable_result=[{
-                "attribute_status": "Accepted",
-                "attribute_type": "Actual",
-                "value": "42",
-                "component": {"name": "ComponentX"},
-                "variable": {"name": "VariableY"}
-            }]
-        )
-    @on('request_start_transaction_req')
-    async def on_request_start_transaction_req(self, start_transaction_req, **kwargs):
-        print("request start transaction")
-        return
-
-    @on(Action.heartbeat)
-    async def on_heartbeat_req(self, heartbeat_req, **kwargs):
-        print("heartbeat req응답")
-        await self.send_heartbeat()
-        return
 
     async def send_boot_notification(self):
         request = call.BootNotification(
@@ -58,15 +39,13 @@ class ChargePoint201(CP):
         response = await self.call(request)
         print("heartbeat 응답:", response)
 
-    async def send_authorize(self):
+    async def send_authorize(self, _id_token: str = "token-3456"):
         request = call.Authorize(
-            id_token={
-                "id_token": "token-3456",
-                "type": "Central"
-            }
+            id_token={"id_token": _id_token, "type": "Central"}
         )
         response = await self.call(request)
         print("Authorize 응답:", response)
+        return response
 
     async def start_transaction(self):
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -82,22 +61,12 @@ class ChargePoint201(CP):
         response = await self.call(request)
         print("Transaction Started 응답:", response)
 
-    async def send_meter_values(self):
-        timestamp = datetime.now(timezone.utc).isoformat()
-        request = call.MeterValues(
-            evse_id=1,
-            meter_value=[{
-                "timestamp": timestamp,
-                "sampled_value": [{
-                    "value": "15.2",
-                    "measurand": "Energy.Active.Import.Register"
-                }]
-            }]
-        )
-        response = await self.call(request)
-        print("MeterValues 응답:", response)
 
-    async def stop_transaction(self):
+
+    async def stop_transaction(
+            self, _transaction_id: str = "tx-001" , _stopped_reason: str = "EVDisconnected",
+            _evse_id: int = 1, _connector_id: int = 1
+    ):
         timestamp = datetime.now(timezone.utc).isoformat()
         request = call.TransactionEvent(
             event_type="Ended",
@@ -105,11 +74,15 @@ class ChargePoint201(CP):
             trigger_reason="EVCommunicationLost",
             seq_no=2,
             transaction_info={
-                "transaction_id": "tx-001",
-                "stopped_reason": "EVDisconnected"
+                "transaction_id": _transaction_id,
+                "stopped_reason": _stopped_reason
             },
-            evse={"id": 1, "connector_id": 1}
+            evse={"id": _evse_id, "connector_id": _connector_id},
         )
+        request.custom_data:Dict[str, Any] = {
+            "vendorId": "ChargeSet",  # 필수 필드를 추가
+            "Test":"test"
+        }
         response = await self.call(request)
         print("Transaction Ended 응답:", response)
 
@@ -118,6 +91,19 @@ async def run_cp(cp):
         await cp.start()
     except websockets.exceptions.ConnectionClosedOK:
         print("연결이 정상적으로 종료되었습니다.")
+
+async def authorize_transaction_manager(cp):
+    while True:
+        authorzie_response = await cp.send_authorize()
+        print("authorize_response:") # chargingSchedules 받음
+        print(authorzie_response)
+        print(authorzie_response.custom_data)
+        await asyncio.sleep(1)
+        await cp.start_transaction()
+        await asyncio.sleep(5) # 여기에 차지 스케쥴 계산하는거 넣으면됨
+        await cp.stop_transaction()
+        await asyncio.sleep(10)
+        break
 
 async def charge_point_manager(uri, cp_name):
     async with websockets.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
@@ -128,7 +114,9 @@ async def charge_point_manager(uri, cp_name):
         await asyncio.sleep(1)
 
         print(f"ChargeStation {cp_name} is ready to charge.")
+        await authorize_transaction_manager(cp)
 
+"""
         while True:
             command = await asyncio.to_thread(input, f"Enter command for {cp_name} (start/stop/exit): ")
             command = command.strip()
@@ -143,15 +131,7 @@ async def charge_point_manager(uri, cp_name):
                 break
             else:
                 print("Unknown command. Please use 'start', 'stop', or 'exit'.")
-
-        """
-        await cp.send_authorize()
-        await cp.start_transaction()
-        await asyncio.sleep(5)
-        await cp.stop_transaction()
-        await asyncio.sleep(10)
-        """
-
+"""
 
 
 

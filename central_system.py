@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 import sys
 
-
+from typing import Any, Dict, List, Optional
 from ocpp.routing import on
 from ocpp.v201 import ChargePoint as cp
 from ocpp.v201 import call, call_result
@@ -24,32 +24,8 @@ clinet = MongoClient('localhost', 27017)
 db = clinet["charge-set"]
 reservation_collection = db["reservation"]
 charging_profile_collection = db["chargingProfile"]
-
-"""
-{
-  "_id": {
-    "$oid": "67fb7262fcb584c29e147764"
-  },
-  "reservationId": "67fb7113fcb584c29e147758",
-  "chargingProfileKind": "ABSOLUTE",
-  "startSchedule": {
-    "$date": "2025-04-13T16:00:00.000Z"
-  },
-  "chargingSchedules": [
-    {
-      "startPeriod": 0,
-      "limit": 4000,
-      "useESS": true
-    },
-    {
-      "startPeriod": 1800,
-      "limit": 3000,
-      "useESS": false
-    }
-  ]
-}
-"""
-
+transaction_collection = db["transaction"]
+evse_collection = db["evse"]
 
 class ChargePointHandler(cp):
     def __init__(self, *args, **kwargs):
@@ -118,13 +94,7 @@ class ChargePointHandler(cp):
             call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.no_credit))
             return call_result_authorize
         # TODO: 충전소 위치 확인, 커넥터 확인, 스타트타임 확인 -> 업데이트 해줘야함(예약시간 지남)
-        else:
-            print("reservation found")
-            reservation_id = str(reservation_data["_id"]) # 예약 id
-            charging_profile = charging_profile_collection.find_one({"reservationId": reservation_id})
-            print(reservation_id)
-            print("chargingProfile found")
-            print(charging_profile)
+
 
         match reservation_data["reservationStatus"]:
             case "ACTIVE": # "ACTIVE" -	현재 유효한 예약. 아직 예약된 시간이 아님 (예약을 생성하면 ACTIVE 상태)
@@ -149,18 +119,46 @@ class ChargePointHandler(cp):
                 print("unknown error")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.unknown))
 
+
+        reservation_id = str(reservation_data["_id"])  # 예약 id
+        print(reservation_id)
+        print("chargingProfile found")
+        charging_profile:Dict[str, Any] = charging_profile_collection.find_one({"reservationId": reservation_id})["chargingSchedules"]
+        print(charging_profile)
+
+        _custom_data: Dict[str, Any] = {
+            "vendorId": "ChargeSet",  # 필수 필드를 추가
+            "chargingSchedules": charging_profile
+        }
+
+        call_result_authorize.custom_data = _custom_data
         return call_result_authorize
-    # request_start_transaction_req 보내야함
+
+
+
+    @on(Action.set_charging_profile)
+    def on_set_charging_profile(self, **kwargs):
+        return call_result.SetChargingProfile(status=GenericStatusEnumType.accepte, charging_profile_id=1, custom_data=[Dict[str, Any]])
+
 
     @on(Action.transaction_event)
     def on_transaction_event(self, **kwargs):
+        """
+        {'event_type': 'Ended',
+         'timestamp': '2025-05-13T02:50:15.523094+00:00',
+          'trigger_reason': 'EVCommunicationLost', 'seq_no': 2,
+           'transaction_info': {'transaction_id': 'tx-001', 'stopped_reason': 'EVDisconnected'},
+            'evse': {'id': 1, 'connector_id': 1},
+             'custom_data': {'vendor_id': 'ChargeSet', 'test': 'test'}}
+        """
         print("Transaction event")
         print(kwargs)
-        print(call_result.TransactionEvent.id_token_info)
+        # DB 저장
+        if kwargs["event_type"] == "Started":
+            transaction_collection.insert_one({"Test1": "test1", "Test2": "test2"}, )
+        if kwargs["event_type"] == "Ended":
+            transaction_collection.update_one({"Test1":"test1"},{"$set":{"Test1":"test1updated"}} )
         return call_result.TransactionEvent()
-
-
-
 
     @on(Action.notify_charging_limit)
     def on_notify_charging_limit(self, **kwargs):
@@ -198,6 +196,8 @@ class ChargePointHandler(cp):
     @on(Action.data_transfer)
     def on_data_transfer(self, **kwargs):
         return call_result.DataTransfer(status=GenericStatusEnumType.accepted, data="")
+
+
 
 
     async def reset_req(self, **kwargs):
@@ -289,16 +289,7 @@ class ChargePointHandler(cp):
         payload = call.UnlockConnector(**kwargs)
         return await self.call(payload)
 
-
     async def heartbeat_req(self, **kwargs):
         print("heartbeat req")
         payload = call.Heartbeat(**kwargs)
         return await self.call(payload)
-
-
-
-
-
-
-
-
