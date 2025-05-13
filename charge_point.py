@@ -17,11 +17,10 @@ from ocpp.v201.enums import (
     Iso15118EVCertificateStatusEnumType
 )
 
-
+# TODO 함수 전체적으로 인자값들 조정
 class ChargePoint201(CP):
     def __init__(self, id, ws):
         super().__init__(id, ws)
-
 
     async def send_boot_notification(self):
         request = call.BootNotification(
@@ -99,10 +98,10 @@ async def authorize_transaction_manager(cp):
         print(authorzie_response)
         print(authorzie_response.custom_data)
         await asyncio.sleep(1)
-        await cp.start_transaction()
-        await asyncio.sleep(5) # 여기에 차지 스케쥴 계산하는거 넣으면됨
-        await cp.stop_transaction()
-        await asyncio.sleep(10)
+        await cp.start_transaction() # TODO 이 chargingSchedules를 트랜잭션에 보내고 DB에 기록
+        await asyncio.sleep(5) # TODO 충전시간만큼 sleep
+        await cp.stop_transaction() # TODO트랜잭션 ended로 업데이트
+        await asyncio.sleep(1) #
         break
 
 async def charge_point_manager(uri, cp_name):
@@ -112,8 +111,9 @@ async def charge_point_manager(uri, cp_name):
         await asyncio.sleep(1)
         await cp.send_boot_notification()
         await asyncio.sleep(1)
-
         print(f"ChargeStation {cp_name} is ready to charge.")
+
+        # TODO 여기에서 무한루프로 플러그앤 차지 기다리면 됨
         await authorize_transaction_manager(cp)
 
 """
@@ -135,9 +135,9 @@ async def charge_point_manager(uri, cp_name):
 
 
 
-async def main():
+async def main(*args, **kwargs):
     uri = "ws://localhost:9000/"
-
+    # TODO main함수 인자로 처음 CP값 넘겨주면 될 것 같음
     await asyncio.gather(
         charge_point_manager(uri + "CP_01", "CP_01"),
         #charge_point_manager(uri + "CP_02", "CP_02"),
