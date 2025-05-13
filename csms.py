@@ -64,7 +64,8 @@ async def on_connect(websocket, path):
             await cp.start()
         except websockets.exceptions.ConnectionClosedOK:
             logging.info("Client closed the connection normally (code 1000).")
-
+            #TODO evse 데이터 업데이트
+            await cp.close_connection()
 
 async def main():
     parser = argparse.ArgumentParser(

@@ -25,8 +25,8 @@ class ChargePoint201(CP):
     async def send_boot_notification(self):
         request = call.BootNotification(
             charging_station={
-                "model": "Model X",
-                "vendor_name": "Vendor Y"
+                "model": "CapStone",
+                "vendor_name": "ChargeSet"
             },
             reason="PowerUp"
         )
@@ -46,21 +46,28 @@ class ChargePoint201(CP):
         print("Authorize 응답:", response)
         return response
 
-    async def start_transaction(self):
+    async def start_transaction(
+            self, _transaction_id: str = "tx-001" , _stopped_reason: str = "EVDisconnected",
+            _evse_id: int = 1, _connector_id: int = 1
+    ):
         timestamp = datetime.now(timezone.utc).isoformat()
         request = call.TransactionEvent(
             event_type="Started",
             timestamp=timestamp,
-            trigger_reason="Authorized",
-            seq_no=1,
-            transaction_info={"transaction_id": "tx-001"},
-            id_token={"id_token": "token-3456", "type": "Central"},
-            evse={"id": 1, "connector_id": 1}
+            trigger_reason="EVCommunicationLost",
+            seq_no=2,
+            transaction_info={
+                "transaction_id": _transaction_id,
+                "stopped_reason": _stopped_reason
+            },
+            evse={"id": _evse_id, "connector_id": _connector_id},
         )
+        request.custom_data: Dict[str, Any] = {
+            "vendorId": "ChargeSet",  # 필수 필드를 추가
+            "Test": "test" # 여기에 차지 스케쥴 줘야함
+        }
         response = await self.call(request)
         print("Transaction Started 응답:", response)
-
-
 
     async def stop_transaction(
             self, _transaction_id: str = "tx-001" , _stopped_reason: str = "EVDisconnected",
@@ -139,12 +146,12 @@ async def main(*args, **kwargs):
     uri = "ws://localhost:9000/"
     # TODO main함수 인자로 처음 CP값 넘겨주면 될 것 같음
     await asyncio.gather(
-        charge_point_manager(uri + "CP_01", "CP_01"),
-        #charge_point_manager(uri + "CP_02", "CP_02"),
+        charge_point_manager(uri + "ST_01", "CP_01"),
+        #charge_point_manager(uri + "ST_02", "CP_02"),
     )
 
 
-
+# TODO 1분마다 데이터 최신화
 
 if __name__ == "__main__":
     asyncio.run(main())

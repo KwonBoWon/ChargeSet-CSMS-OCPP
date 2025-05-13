@@ -3,6 +3,8 @@ from datetime import datetime
 import sys
 
 from typing import Any, Dict, List, Optional
+
+from bson import Timestamp
 from ocpp.routing import on
 from ocpp.v201 import ChargePoint as cp
 from ocpp.v201 import call, call_result
@@ -30,15 +32,25 @@ evse_collection = db["evse"]
 class ChargePointHandler(cp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.charge_point_id = args[0]
+        print("charge point id:", self.charge_point_id)
 
     @on(Action.boot_notification)
     async def on_boot_notification(self, **kwargs):
         print("boot notification")
         print(kwargs)
         logging.debug("Received a BootNotification")
-        #await self.heartbeat_req()
+        #TODO 여기에서 evse 값 업데이트 해줘야함
+        #evse_collection.update_many({"stationId": self.charge_point_id},
+        #                            [{"evseStatus", "AVAILABLE"}, {"lastUpdated":Timestamp}])
+
         return call_result.BootNotification(current_time=datetime.now().isoformat(),
                                                    interval=300, status=RegistrationStatusEnumType.accepted)
+
+    # 연결 끊길때
+    async def close_connection(self):
+        evse_collection.update_many({"stationId": self.charge_point_id},
+                                    [{"evseStatus", "FALUTED"},{"lastUpdated":Timestamp}])
 
     @on(Action.status_notification)
     def on_status_notification(self, **kwargs):
@@ -55,33 +67,9 @@ class ChargePointHandler(cp):
     # 3. connectorId 맞는지
     # 4. startTime맞는지
     # 5. reservation컬렉션 update waiting->active
-    """
-    {
-      "_id": {
-        "$oid": "67fb7450fcb584c29e147773"
-      },
-      "stationId": "ST-001",
-      "evseId": "EVSE-ST1-001",
-      "connectorId": 1,
-      "idToken": "token-3456",
-      "startTime": {
-        "$date": "2025-04-14T13:00:00.000Z"
-      },
-      "endTime": {
-        "$date": "2025-04-14T20:00:00.000Z"
-      },
-      "targetEnergyWh": 15000,
-      "reservationStatus": "ACTIVE",
-      "createdAt": {
-        "$date": "2025-04-12T09:00:00.000Z"
-      },
-      "userId": "67dfc4c4dbbe444d632a2421"
-    }
-    
-    """
+
     @on(Action.authorize)
     def on_authorize(self, **kwargs):
-
         print("Authorize")
         print(kwargs)
         authorize_id_token = kwargs["id_token"]["id_token"]
@@ -143,19 +131,24 @@ class ChargePointHandler(cp):
 
     @on(Action.transaction_event)
     def on_transaction_event(self, **kwargs):
-        """
-        {'event_type': 'Ended',
-         'timestamp': '2025-05-13T02:50:15.523094+00:00',
-          'trigger_reason': 'EVCommunicationLost', 'seq_no': 2,
-           'transaction_info': {'transaction_id': 'tx-001', 'stopped_reason': 'EVDisconnected'},
-            'evse': {'id': 1, 'connector_id': 1},
-             'custom_data': {'vendor_id': 'ChargeSet', 'test': 'test'}}
-        """
         print("Transaction event")
         print(kwargs)
-        # DB 저장
+        # TODO evse값 업데이트, transaction 컬렉션에 값 업데이트
         if kwargs["event_type"] == "Started":
-            transaction_collection.insert_one({"Test1": "test1", "Test2": "test2"}, )
+            transaction_collection.insert_one({
+                "stationId": "ST-001",
+                "evseId": "EVSE-ST1-001",
+                "connectorId": 1,
+                "userId": "user1234",
+                "transactionId": "tx-001",
+                "startTime":"",
+                "endTime":"",
+                "energyWh": "10000",
+                "cost": 3100,
+                "transactionStatus":"CHARGING",
+                "startSchedule":"Timestamp",
+                "chargingProfileSnapshots":"Array"
+            }, )
         if kwargs["event_type"] == "Ended":
             transaction_collection.update_one({"Test1":"test1"},{"$set":{"Test1":"test1updated"}} )
         return call_result.TransactionEvent()
@@ -196,9 +189,6 @@ class ChargePointHandler(cp):
     @on(Action.data_transfer)
     def on_data_transfer(self, **kwargs):
         return call_result.DataTransfer(status=GenericStatusEnumType.accepted, data="")
-
-
-
 
     async def reset_req(self, **kwargs):
         payload = call.Reset(**kwargs)
