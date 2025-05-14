@@ -2,9 +2,12 @@ import logging
 from datetime import datetime
 import sys
 
+
+import os
+from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional
 
-from bson import Timestamp
+
 from ocpp.routing import on
 from ocpp.v201 import ChargePoint as cp
 from ocpp.v201 import call, call_result
@@ -22,8 +25,14 @@ from pymongo import MongoClient
 
 logging.basicConfig(level=logging.INFO)
 
-clinet = MongoClient('localhost', 27017)
-db = clinet["charge-set"]
+load_dotenv()
+
+mongodb_uri = os.getenv("MONGODB_URI")
+
+client = MongoClient(mongodb_uri)
+#clinet = MongoClient('localhost', 27017)
+# TODO find_one, update_one 정렬하고 가장 나중값으로 사용해야함
+db = client["charge-set"]
 reservation_collection = db["reservation"]
 charging_profile_collection = db["chargingProfile"]
 transaction_collection = db["transaction"]
@@ -40,17 +49,18 @@ class ChargePointHandler(cp):
         print("boot notification")
         print(kwargs)
         logging.debug("Received a BootNotification")
-        #TODO 여기에서 evse 값 업데이트 해줘야함
-        #evse_collection.update_many({"stationId": self.charge_point_id},
-        #                            [{"evseStatus", "AVAILABLE"}, {"lastUpdated":Timestamp}])
+        # evse 값 업데이트
+        evse_collection.update_many({"stationId": self.charge_point_id},
+                                    {"$set": {"evseStatus": "AVAILABLE", "lastUpdated": datetime.now()}})
 
         return call_result.BootNotification(current_time=datetime.now().isoformat(),
                                                    interval=300, status=RegistrationStatusEnumType.accepted)
 
-    # 연결 끊길때
+    # 연결 끊어질 때
     async def close_connection(self):
+        # evse 값 업데이트
         evse_collection.update_many({"stationId": self.charge_point_id},
-                                    [{"evseStatus", "FALUTED"},{"lastUpdated":Timestamp}])
+                                    {"$set": {"evseStatus": "OFFLINE", "lastUpdated": datetime.now()}})
 
     @on(Action.status_notification)
     def on_status_notification(self, **kwargs):
@@ -136,21 +146,24 @@ class ChargePointHandler(cp):
         # TODO evse값 업데이트, transaction 컬렉션에 값 업데이트
         if kwargs["event_type"] == "Started":
             transaction_collection.insert_one({
-                "stationId": "ST-001",
-                "evseId": "EVSE-ST1-001",
-                "connectorId": 1,
-                "userId": "user1234",
-                "transactionId": "tx-001",
-                "startTime":"",
+                "stationId": self.charge_point_id,#
+                "evseId": "EVSE-ST1-001",#kwargs["evse_id"],#
+                "connectorId": 1,#kwargs["connector_id"], #
+                "userId": "user1234",# 이건 검색해야함;
+                "idToken": "token-3456",#kwargs["id_token"],
+                "transactionId": "tx-001",#kwargs["transaction_id"],#
+                "startTime":datetime.now(),
                 "endTime":"",
                 "energyWh": "10000",
                 "cost": 3100,
                 "transactionStatus":"CHARGING",
-                "startSchedule":"Timestamp",
-                "chargingProfileSnapshots":"Array"
-            }, )
+                "startSchedule": datetime.now(),
+                "chargingProfileSnapshots": "Array" #kwargs["charging_schedules"]
+            })
         if kwargs["event_type"] == "Ended":
-            transaction_collection.update_one({"Test1":"test1"},{"$set":{"Test1":"test1updated"}} )
+            transaction_collection.update_one({"transactionId":kwargs["transaction_id"]},{"$set":{"transactionStatus":"COMPLETE"}})
+        if kwargs["event_type"] == "Update":
+            pass
         return call_result.TransactionEvent()
 
     @on(Action.notify_charging_limit)

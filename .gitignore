@@ -1,3 +1,4 @@
 pymongo_test.py
 config.txt
-./websockets_test/
+websockets_test/
+.env

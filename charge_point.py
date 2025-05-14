@@ -99,17 +99,27 @@ async def run_cp(cp):
         print("연결이 정상적으로 종료되었습니다.")
 
 async def authorize_transaction_manager(cp):
-    while True:
-        authorzie_response = await cp.send_authorize()
-        print("authorize_response:") # chargingSchedules 받음
-        print(authorzie_response)
-        print(authorzie_response.custom_data)
-        await asyncio.sleep(1)
-        await cp.start_transaction() # TODO 이 chargingSchedules를 트랜잭션에 보내고 DB에 기록
-        await asyncio.sleep(5) # TODO 충전시간만큼 sleep
-        await cp.stop_transaction() # TODO트랜잭션 ended로 업데이트
-        await asyncio.sleep(1) #
-        break
+    authorzie_response = await cp.send_authorize("token-3456") # TODO 토큰값 넘기기
+    print("authorize_response:") # chargingSchedules 받음
+    print(authorzie_response)
+    charging_schedules = {"charging_schedules": authorzie_response.custom_data["charging_schedules"] }
+
+    transaction_id = {"transaction_id": "tx-001"}
+    evse_id = {"evse_id": 1}
+    #user_id = {"user_id": "token"}
+    id_token = {"idToken": "token-3456"}
+    connector_id = {"connector_id": 1}
+
+    await cp.start_transaction()  # TODO 이 chargingSchedules를 트랜잭션에 보내고 DB에 기록
+    for charging_schedule in charging_schedules["charging_schedules"]:
+        print(f"cccc: {charging_schedule}")
+        charging_period=charging_schedule["start_period"]
+        if charging_period != 0:
+            await asyncio.sleep(charging_period/100)
+        # TODO 트랜잭션 업데이트, 시간이 되면 보내야함..
+
+    await cp.stop_transaction() # TODO트랜잭션 ended로 업데이트
+    await asyncio.sleep(1)
 
 async def charge_point_manager(uri, cp_name):
     async with websockets.connect(uri, subprotocols=["ocpp2.0.1"]) as ws:
@@ -122,7 +132,7 @@ async def charge_point_manager(uri, cp_name):
 
         # TODO 여기에서 무한루프로 플러그앤 차지 기다리면 됨
         await authorize_transaction_manager(cp)
-
+        # TODO 받아야 하는 데이터 evseId, connectorId, userId(token),
 """
         while True:
             command = await asyncio.to_thread(input, f"Enter command for {cp_name} (start/stop/exit): ")
@@ -146,8 +156,8 @@ async def main(*args, **kwargs):
     uri = "ws://localhost:9000/"
     # TODO main함수 인자로 처음 CP값 넘겨주면 될 것 같음
     await asyncio.gather(
-        charge_point_manager(uri + "ST_01", "CP_01"),
-        #charge_point_manager(uri + "ST_02", "CP_02"),
+        charge_point_manager(uri + "ST_001", "ST_001"),
+        #charge_point_manager(uri + "ST_002", "ST_002"),
     )
 
 
