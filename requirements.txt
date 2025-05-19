@@ -26,3 +26,6 @@ uvicorn==0.34.2
 websockets==11.0.3
 zope.event==5.0
 zope.interface==7.2
+
+pyserial~=3.5
+pyserial-asyncio~=0.6

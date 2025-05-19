@@ -151,7 +151,7 @@ class ChargePointHandler(cp):
                 "connectorId": 1,#kwargs["connector_id"], #
                 "userId": "user1234",# 이건 검색해야함;
                 "idToken": "token-3456",#kwargs["id_token"],
-                "transactionId": "tx-001",#kwargs["transaction_id"],#
+                "reservationId": "67fb7450fcb584c29e147773",#kwargs["reservation_id"],#
                 "startTime":datetime.now(),
                 "endTime":"",
                 "energyWh": "10000",

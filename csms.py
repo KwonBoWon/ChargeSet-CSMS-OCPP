@@ -11,8 +11,9 @@ import ssl
 from pathlib import Path
 import argparse
 from pymongo import MongoClient
-
-
+import serial
+import serial_asyncio
+import time
 
 
 __version__ = "0.1.0"
