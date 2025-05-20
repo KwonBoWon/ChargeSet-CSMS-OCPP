@@ -47,25 +47,34 @@ class ChargePoint201(CP):
         return response
 
     async def start_transaction(
-            self, _transaction_id: str = "tx-001" , _stopped_reason: str = "EVDisconnected",
-            _evse_id: int = 1, _connector_id: int = 1
+            self, _user_id: str = "token3456", _id_token:str = "token3456",
+            _evse_id: str = 1, _connector_id: int = 1,
+            _charging_schedules: List[Dict[str, Any]] = [{"start_period": 0, "charging_rate_unit": "W", "charging_rate": 0}],
+            _start_time:str = '2025-04-14T13:00:00', _end_time:str = '2025-04-14T13:00:00'
     ):
         timestamp = datetime.now(timezone.utc).isoformat()
+        _custom_data: Dict[str, Any] = {
+            "vendor_id": "ChargeSet",  # 필수 필드를 추가
+            'evse_id': _evse_id,
+            'connector_id': _connector_id,
+            "user_id": _user_id,
+            "id_token": _id_token,
+            "charging_schedules": _charging_schedules,
+            'start_time': _start_time,
+            'end_time': _end_time,
+        }
         request = call.TransactionEvent(
             event_type="Started",
             timestamp=timestamp,
-            trigger_reason="EVCommunicationLost",
-            seq_no=2,
+            trigger_reason="Authorized",
+            seq_no=1,
             transaction_info={
-                "transaction_id": _transaction_id,
-                "stopped_reason": _stopped_reason
+                "transaction_id": "tx-001",
             },
-            evse={"id": _evse_id, "connector_id": _connector_id},
+            evse={"id": _connector_id, "connector_id": _connector_id},
+            custom_data=_custom_data
         )
-        request.custom_data: Dict[str, Any] = {
-            "vendorId": "ChargeSet",  # 필수 필드를 추가
-            "Test": "test" # 여기에 차지 스케쥴 줘야함
-        }
+
         response = await self.call(request)
         print("Transaction Started 응답:", response)
 
@@ -74,6 +83,10 @@ class ChargePoint201(CP):
             _evse_id: int = 1, _connector_id: int = 1
     ):
         timestamp = datetime.now(timezone.utc).isoformat()
+        _custom_data:Dict[str, Any] = {
+            "vendorId": "ChargeSet",  # 필수 필드를 추가
+            "Test":"test"
+        }
         request = call.TransactionEvent(
             event_type="Ended",
             timestamp=timestamp,
@@ -83,12 +96,10 @@ class ChargePoint201(CP):
                 "transaction_id": _transaction_id,
                 "stopped_reason": _stopped_reason
             },
-            evse={"id": _evse_id, "connector_id": _connector_id},
+            evse={"id": _connector_id, "connector_id": _connector_id},
+            custom_data=_custom_data
         )
-        request.custom_data:Dict[str, Any] = {
-            "vendorId": "ChargeSet",  # 필수 필드를 추가
-            "Test":"test"
-        }
+
         response = await self.call(request)
         print("Transaction Ended 응답:", response)
 
@@ -99,25 +110,26 @@ async def run_cp(cp):
         print("연결이 정상적으로 종료되었습니다.")
 
 async def authorize_transaction_manager(cp):
-    authorzie_response = await cp.send_authorize("token-3456") # TODO 토큰값 넘기기
+    authorzie_response = await cp.send_authorize("token-1234") # TODO 토큰값 넘기기
     print("authorize_response:") # chargingSchedules 받음
     print(authorzie_response)
-    charging_schedules = {"charging_schedules": authorzie_response.custom_data["charging_schedules"] }
+    _charging_schedules = authorzie_response.custom_data["charging_schedules"]
+    _evse_id = authorzie_response.custom_data['evse_id']
+    _user_id = authorzie_response.custom_data['user_id']
+    _id_token = authorzie_response.custom_data['id_token']
+    _connector_id = authorzie_response.custom_data['connector_id']
+    _start_time = authorzie_response.custom_data['start_time']
+    _end_time = authorzie_response.custom_data['end_time']
 
-    transaction_id = {"transaction_id": "tx-001"}
-    evse_id = {"evse_id": 1}
-    #user_id = {"user_id": "token"}
-    id_token = {"idToken": "token-3456"}
-    connector_id = {"connector_id": 1}
-
-    await cp.start_transaction()  # TODO 이 chargingSchedules를 트랜잭션에 보내고 DB에 기록
-    for charging_schedule in charging_schedules["charging_schedules"]:
-        print(f"cccc: {charging_schedule}")
+    await cp.start_transaction(
+        _user_id, _id_token, _evse_id, _connector_id, _charging_schedules
+    )
+    for charging_schedule in _charging_schedules:
+        print(f"charging_schedule: {charging_schedule}")
         charging_period=charging_schedule["start_period"]
         if charging_period != 0:
             await asyncio.sleep(charging_period/100)
         # TODO 트랜잭션 업데이트, 시간이 되면 보내야함..
-
     await cp.stop_transaction() # TODO트랜잭션 ended로 업데이트
     await asyncio.sleep(1)
 

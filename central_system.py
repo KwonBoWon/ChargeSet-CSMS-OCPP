@@ -76,7 +76,7 @@ class ChargePointHandler(cp):
     # 2. stationID 맞는지
     # 3. connectorId 맞는지
     # 4. startTime맞는지
-    # 5. reservation컬렉션 update waiting->active
+    # 5. reservation컬렉션 update waiting->active₩
 
     @on(Action.authorize)
     def on_authorize(self, **kwargs):
@@ -126,7 +126,14 @@ class ChargePointHandler(cp):
 
         _custom_data: Dict[str, Any] = {
             "vendorId": "ChargeSet",  # 필수 필드를 추가
-            "chargingSchedules": charging_profile
+            "userId": reservation_data['userId'],
+            "idToken": reservation_data['idToken'],
+            "chargingSchedules": charging_profile,
+            "connectorId": reservation_data["connectorId"],
+            "evseId": reservation_data["evseId"],
+            # TODO endtime 스트링으로바꿨다가 다시넣기
+            "startTime": reservation_data["startTime"].strftime('%Y-%m-%d %H:%M:%S'),
+            "endTime": reservation_data["endTime"].strftime('%Y-%m-%d %H:%M:%S')
         }
 
         call_result_authorize.custom_data = _custom_data
@@ -141,27 +148,32 @@ class ChargePointHandler(cp):
 
     @on(Action.transaction_event)
     def on_transaction_event(self, **kwargs):
+        # kwargs: evse_id, connector_id, user_id, id_token, reservation_id, charging_schedules
         print("Transaction event")
         print(kwargs)
         # TODO evse값 업데이트, transaction 컬렉션에 값 업데이트
         if kwargs["event_type"] == "Started":
             transaction_collection.insert_one({
-                "stationId": self.charge_point_id,#
-                "evseId": "EVSE-ST1-001",#kwargs["evse_id"],#
-                "connectorId": 1,#kwargs["connector_id"], #
-                "userId": "user1234",# 이건 검색해야함;
-                "idToken": "token-3456",#kwargs["id_token"],
-                "reservationId": "67fb7450fcb584c29e147773",#kwargs["reservation_id"],#
-                "startTime":datetime.now(),
-                "endTime":"",
+                "stationId": self.charge_point_id,
+                "evseId": kwargs['custom_data']['evse_id'],
+                "connectorId": kwargs['custom_data']['connector_id'],
+                "userId": kwargs['custom_data']['user_id'],
+                "idToken": kwargs['custom_data']['id_token'],
+                "transactionId": "None",
+                "startTime":datetime.fromisoformat(kwargs['custom_data']['start_time']),
+                "endTime":datetime.fromisoformat(kwargs['custom_data']['end_time']),
                 "energyWh": "10000",
                 "cost": 3100,
                 "transactionStatus":"CHARGING",
                 "startSchedule": datetime.now(),
-                "chargingProfileSnapshots": "Array" #kwargs["charging_schedules"]
+                "chargingProfileSnapshots": kwargs['custom_data']['charging_schedules']
             })
+            evse_collection.update_one(
+                {"evseId": kwargs['custom_data']["evse_id"]}, {"$set": {"evseStatus": "CHARGING"}})
         if kwargs["event_type"] == "Ended":
-            transaction_collection.update_one({"transactionId":kwargs["transaction_id"]},{"$set":{"transactionStatus":"COMPLETE"}})
+            pass
+            #transaction_collection.update_one(
+            #    {"reservation_id":kwargs["reservation_id"]},{"$set":{"transactionStatus":"COMPLETE"}})
         if kwargs["event_type"] == "Update":
             pass
         return call_result.TransactionEvent()
