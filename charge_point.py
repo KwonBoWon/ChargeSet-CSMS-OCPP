@@ -166,6 +166,8 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
     _start_time = authorzie_response.custom_data['start_time']
     _end_time = authorzie_response.custom_data['end_time']
     _reservation_id = authorzie_response.custom_data['reservation_id']
+    _cost = authorzie_response.custom_data['cost']
+    _energyWh = authorzie_response.custom_data['energyWh']
 
     # 스케쥴 전송
     response = {
@@ -176,7 +178,11 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
 
 
     await cp.start_transaction(
-        _user_id, _id_token, _evse_id, _connector_id,_reservation_id, _charging_schedules, _start_time, _end_time
+        _user_id, _id_token,
+        _evse_id, _connector_id,
+        _reservation_id, _charging_schedules,
+        _start_time, _end_time,
+        _cost, _energyWh
     )
     last_period = 0
     for charging_schedule in _charging_schedules:
