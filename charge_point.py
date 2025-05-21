@@ -6,6 +6,7 @@ import serial_asyncio
 import serial.tools.list_ports
 import json
 import platform
+import logging
 
 from ocpp.v201 import ChargePoint as CP
 from ocpp.v201 import call, call_result
@@ -24,7 +25,34 @@ from ocpp.v201.enums import (
 
 candidates = [] # 현재 usb 포트
 
-# TODO 함수 전체적으로 인자값들 조정
+class ColorFormatter2(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[94m",    # 파랑
+        logging.INFO: "\033[92m",     # 초록
+        logging.WARNING: "\033[93m",  # 노랑
+        logging.ERROR: "\033[91m",    # 빨강
+        logging.CRITICAL: "\033[95m", # 보라
+    }
+    RESET = "\033[0m"
+
+    def format(self, record):
+        log_color = self.COLORS.get(record.levelno, self.RESET)
+        message = super().format(record)
+        return f"{log_color}{message}{self.RESET}"
+
+
+# 색상 적용
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(ColorFormatter2(handler.formatter._fmt))
+
+#logging.basicConfig(level=logging.INFO)
+# 전역 로거 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 class ChargePoint201(CP):
     def __init__(self, id, ws):
         super().__init__(id, ws)
@@ -38,26 +66,30 @@ class ChargePoint201(CP):
             reason="PowerUp"
         )
         response = await self.call(request)
-        print("BootNotification 응답:", response)
+        logging.info(f"Send a BootNotification")
+        logging.info(f"Received a BootNotification")
 
     async def send_heartbeat(self):
         request = call.Heartbeat()
         response = await self.call(request)
-        print("heartbeat 응답:", response)
+        logging.info("Send a Heartbeat")
 
     async def send_authorize(self, _id_token: str = "token-3456"):
         request = call.Authorize(
             id_token={"id_token": _id_token, "type": "Central"}
         )
         response = await self.call(request)
-        print("Authorize 응답:", response)
+        logging.info(f"Send a Authorize: {request.id_token}")
+        logging.info(f"Received a Authorize")
         return response
 
     async def start_transaction(
             self, _user_id: str = "token3456", _id_token:str = "token3456",
             _evse_id: str = 1, _connector_id: int = 1,
+            _reservation_id: str = "res-001",
             _charging_schedules: List[Dict[str, Any]] = [{"start_period": 0, "charging_rate_unit": "W", "charging_rate": 0}],
-            _start_time:str = '2025-04-14T13:00:00', _end_time:str = '2025-04-14T13:00:00'
+            _start_time:str = '2025-04-14T13:00:00', _end_time:str = '2025-04-14T13:00:00',
+            _cost: int = 1333, _energyWh: int=886787979
     ):
         timestamp = datetime.now(timezone.utc).isoformat()
         _custom_data: Dict[str, Any] = {
@@ -66,9 +98,12 @@ class ChargePoint201(CP):
             'connector_id': _connector_id,
             "user_id": _user_id,
             "id_token": _id_token,
+            "reservation_id": _reservation_id,
             "charging_schedules": _charging_schedules,
             'start_time': _start_time,
             'end_time': _end_time,
+            'cost': _cost,
+            'energyWh': _energyWh,
         }
         request = call.TransactionEvent(
             event_type="Started",
@@ -83,16 +118,20 @@ class ChargePoint201(CP):
         )
 
         response = await self.call(request)
-        print("Transaction Started 응답:", response)
+        logging.info(f"Send a Transaction Started: {request.event_type}")
+        logging.info(f"Received a Transaction Started")
 
     async def stop_transaction(
             self, _transaction_id: str = "tx-001" , _stopped_reason: str = "EVDisconnected",
-            _evse_id: int = 1, _connector_id: int = 1
+            _evse_id: str = "st", _connector_id: int = 1, _reservation_id: str = "res-001", _id_token:str = "token3456"
     ):
         timestamp = datetime.now(timezone.utc).isoformat()
         _custom_data:Dict[str, Any] = {
             "vendorId": "ChargeSet",  # 필수 필드를 추가
-            "Test":"test"
+            "userID":_id_token,
+            "evseId": _evse_id,
+            "connectorId": _connector_id,
+            "reservationId": _reservation_id,
         }
         request = call.TransactionEvent(
             event_type="Ended",
@@ -108,18 +147,17 @@ class ChargePoint201(CP):
         )
 
         response = await self.call(request)
-        print("Transaction Ended 응답:", response)
+        logging.info(f"Send a Transaction Ended: {request.event_type}")
+        logging.info(f"Received a Transaction Ended")
 
 async def run_cp(cp):
     try:
         await cp.start()
     except websockets.exceptions.ConnectionClosedOK:
-        print("연결이 정상적으로 종료되었습니다.")
+        logging.info("Disconnected from CSMS. Shutting down ChargePointManager.")
 
 async def authorize_transaction_manager(cp, id_token: str = "token-1234", transport=None):
-    authorzie_response = await cp.send_authorize(id_token) # TODO 토큰값 넘기기
-    print("authorize_response:") # chargingSchedules 받음
-    print(authorzie_response)
+    authorzie_response = await cp.send_authorize(id_token)
     _charging_schedules = authorzie_response.custom_data["charging_schedules"]
     _evse_id = authorzie_response.custom_data['evse_id']
     _user_id = authorzie_response.custom_data['user_id']
@@ -127,6 +165,7 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
     _connector_id = authorzie_response.custom_data['connector_id']
     _start_time = authorzie_response.custom_data['start_time']
     _end_time = authorzie_response.custom_data['end_time']
+    _reservation_id = authorzie_response.custom_data['reservation_id']
 
     # 스케쥴 전송
     response = {
@@ -137,23 +176,20 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
 
 
     await cp.start_transaction(
-        _user_id, _id_token, _evse_id, _connector_id, _charging_schedules
+        _user_id, _id_token, _evse_id, _connector_id,_reservation_id, _charging_schedules, _start_time, _end_time
     )
+    last_period = 0
     for charging_schedule in _charging_schedules:
-        print(f"charging_schedule: {charging_schedule}")
         charging_period=charging_schedule["start_period"]
+        charging_limit=charging_schedule["limit"]
         if charging_period != 0:
-            await asyncio.sleep(charging_period/100)
-        # TODO 트랜잭션 업데이트, 시간이 되면 보내야함..
-    await cp.stop_transaction() # TODO트랜잭션 ended로 업데이트
+            await asyncio.sleep(charging_period-last_period)
+            last_period=charging_period
+            if charging_limit == 0:
+                await cp.stop_transaction(
+                    "tx-001", "EVDisconnected", _evse_id, _connector_id, _reservation_id, _id_token
+                )
     await asyncio.sleep(1)
-
-"""
-        # TODO 여기에서 무한루프로 플러그앤 차지 기다리면 됨
-        await authorize_transaction_manager(cp)
-        # TODO 받아야 하는 데이터 evseId, connectorId, userId(token),
-"""
-
 
 class ESP32Protocol(asyncio.Protocol):
     def __init__(self, port, cp):
@@ -163,35 +199,24 @@ class ESP32Protocol(asyncio.Protocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        print(f"ESP{self.port.device} 연결됨")
+        logging.info(f"[EV] {self.port.device} connected")
 
     def data_received(self, data):
         self.buffer += data.decode()
         while '\n' in self.buffer:
             line, self.buffer = self.buffer.split('\n', 1)
             line = line.strip()
-            print(f"수신된 ID Token: {line}")
+            logging.info(f"[EV] Received ID Token: {line}")
             asyncio.create_task(authorize_transaction_manager(self.cp, line, self.transport))
-    """
-    print(f"처리 중인 ID Token: {id_token}")
-        response = {
-            "chargingSchedules": [
-                {"startPeriod": 0, "limit": 4000, "useESS": True},
-                {"startPeriod": 1800, "limit": 3000, "useESS": False}
-            ]
-        }
-        json_str = json.dumps(response) + "\n"
-        self.transport.write(json_str.encode())
-    """
 
     def connection_lost(self, exc):
-        print(f"ESP{self.port.device} 연결 끊김")
+        logging.info(f"[EV] {self.port.device} Disconnected")
         candidates.remove(self.port.device)
 
 async def find_esp32_port(cp):
     system = platform.system()
 
-    print(f"ESP32 포트를 기다리는중 (OS:{system})")
+    logging.info(f"[EV] port waiting... (OS:{system})")
     while True:
         ports = serial.tools.list_ports.comports()
         for port in ports:
@@ -225,19 +250,15 @@ async def charge_point_manager(uri, cp_name):
         await asyncio.sleep(1)
         await cp.send_boot_notification()
         await asyncio.sleep(1)
-        print(f"ChargeStation {cp_name} is ready to charge.")
+        logging.info(f"ChargeStation {cp_name} is ready to charge.")
         await find_esp32_port(cp)
 
 async def main(*args, **kwargs):
-    uri = "ws://localhost:9000/"
-    # TODO main함수 인자로 처음 CP값 넘겨주면 될 것 같음
+    uri = "ws://192.168.35.95:9000/"
     await asyncio.gather(
-        charge_point_manager(uri + "ST_001", "ST_001"),
-        #charge_point_manager(uri + "ST_002", "ST_002"),
-
+        charge_point_manager(uri + "ST-001", "ST-001"),
+        #charge_point_manager(uri + "ST-002", "ST-002"),
     )
-
-
 # TODO 1분마다 데이터 최신화
 
 if __name__ == "__main__":

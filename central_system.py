@@ -4,6 +4,8 @@ import sys
 
 
 import os
+
+from bson import ObjectId
 from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional
 
@@ -23,15 +25,39 @@ from ocpp.v201.enums import (
 )
 from pymongo import MongoClient
 
-logging.basicConfig(level=logging.INFO)
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[94m",    # 파랑
+        logging.INFO: "\033[92m",     # 초록
+        logging.WARNING: "\033[93m",  # 노랑
+        logging.ERROR: "\033[91m",    # 빨강
+        logging.CRITICAL: "\033[95m", # 보라
+    }
+    RESET = "\033[0m"
 
+    def format(self, record):
+        log_color = self.COLORS.get(record.levelno, self.RESET)
+        message = super().format(record)
+        return f"{log_color}{message}{self.RESET}"
+
+
+# 색상 적용
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(ColorFormatter(handler.formatter._fmt))
+
+#logging.basicConfig(level=logging.INFO)
+# 전역 로거 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+# 환경설정
 load_dotenv()
 
 mongodb_uri = os.getenv("MONGODB_URI")
 
 client = MongoClient(mongodb_uri)
-#clinet = MongoClient('localhost', 27017)
-# TODO find_one, update_one 정렬하고 가장 나중값으로 사용해야함
 db = client["charge-set"]
 reservation_collection = db["reservation"]
 charging_profile_collection = db["chargingProfile"]
@@ -42,13 +68,11 @@ class ChargePointHandler(cp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.charge_point_id = args[0]
-        print("charge point id:", self.charge_point_id)
+        print("Connected charge point id:", self.charge_point_id)
 
     @on(Action.boot_notification)
     async def on_boot_notification(self, **kwargs):
-        print("boot notification")
-        print(kwargs)
-        logging.debug("Received a BootNotification")
+        logging.info("Received a BootNotification")
         # evse 값 업데이트
         evse_collection.update_many({"stationId": self.charge_point_id},
                                     {"$set": {"evseStatus": "AVAILABLE", "lastUpdated": datetime.now()}})
@@ -68,27 +92,20 @@ class ChargePointHandler(cp):
 
     @on(Action.heartbeat)
     def on_heartbeat(self, **kwargs):
-        print("heartbeat")
-        print(kwargs)
-        return call_result.Heartbeat(current_time=datetime.utcnow().isoformat())
 
-    # DB에서 예약정보 확인하고 인증 성공/실패
-    # 2. stationID 맞는지
-    # 3. connectorId 맞는지
-    # 4. startTime맞는지
-    # 5. reservation컬렉션 update waiting->active₩
+        return call_result.Heartbeat(current_time=datetime.utcnow().isoformat())
 
     @on(Action.authorize)
     def on_authorize(self, **kwargs):
-        print("Authorize")
-        print(kwargs)
-        authorize_id_token = kwargs["id_token"]["id_token"]
-        reservation_data = reservation_collection.find_one({"idToken": authorize_id_token})
+        logging.info("Received a Authorize")
 
-        print(reservation_data)
+        authorize_id_token = kwargs["id_token"]["id_token"]
+        print(f"> Auth : {authorize_id_token['evseId'], authorize_id_token['connectorId'], authorize_id_token['userId']}")
+        reservation_data = reservation_collection.find_one({"idToken": authorize_id_token, "reservationStatus": "ACTIVE"})
+        print(f"> Auth : {reservation_data}")
 
         if reservation_data is None:
-            print("reservation not found")
+            logging.ERROR("Reservation not found")
             call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.no_credit))
             return call_result_authorize
         # TODO: 충전소 위치 확인, 커넥터 확인, 스타트타임 확인 -> 업데이트 해줘야함(예약시간 지남)
@@ -96,33 +113,31 @@ class ChargePointHandler(cp):
 
         match reservation_data["reservationStatus"]:
             case "ACTIVE": # "ACTIVE" -	현재 유효한 예약. 아직 예약된 시간이 아님 (예약을 생성하면 ACTIVE 상태)
-                print("reservation already active")
+                logging.info("Reservation Found")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.not_at_this_time))
             case "WAITING": # “WAITING”-	예약된 시간이 되었지만 아직 연결하지 않음(기다려주는 시간 10분이 지나지 않음)
-                print("reservation waiting-accepted")
+                logging.info("reservation waiting-accepted")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.accepted))
             case "ONGOING": # "ONGOING" -	예약 시간에 도달했고, 예약자 본인이 충전 중임
-                print("reservation ongoing")
+                logging.info("reservation ongoing")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.concurrent_tx))
             case "EXPIRED": # "EXPIRED" -	예약 시간이 지났고, 실제 사용(충전)을 하지 않음 (노쇼)
-                print("reservation expired")
+                logging.info("reservation expired")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.expired))
             case "COMPLETED": # "COMPLETED" -	예약자가 충전을 정상적으로 수행했고, 충전이 완료됨
-                print("reservation completed")
+                logging.info("reservation completed")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.concurrent_tx))
             case "CANCELLED": # "CANCELLED" -	사용자가 직접 예약을 취소함
-                print("reservation cancelled")
+                logging.info("reservation cancelled")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.invalid))
             case _: # 그외 값
-                print("unknown error")
+                logging.info("unknown error")
                 call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.unknown))
 
 
         reservation_id = str(reservation_data["_id"])  # 예약 id
-        print(reservation_id)
-        print("chargingProfile found")
         charging_profile:Dict[str, Any] = charging_profile_collection.find_one({"reservationId": reservation_id})["chargingSchedules"]
-        print(charging_profile)
+        print(f"> Auth : {charging_profile}")
 
         _custom_data: Dict[str, Any] = {
             "vendorId": "ChargeSet",  # 필수 필드를 추가
@@ -131,9 +146,11 @@ class ChargePointHandler(cp):
             "chargingSchedules": charging_profile,
             "connectorId": reservation_data["connectorId"],
             "evseId": reservation_data["evseId"],
-            # TODO endtime 스트링으로바꿨다가 다시넣기
+            "reservationId": reservation_id,
             "startTime": reservation_data["startTime"].strftime('%Y-%m-%d %H:%M:%S'),
-            "endTime": reservation_data["endTime"].strftime('%Y-%m-%d %H:%M:%S')
+            "endTime": reservation_data["endTime"].strftime('%Y-%m-%d %H:%M:%S'),
+            "cost": reservation_data["cost"],
+            "targetEnergyWh": reservation_data["targetEnergyWh"],
         }
 
         call_result_authorize.custom_data = _custom_data
@@ -148,22 +165,21 @@ class ChargePointHandler(cp):
 
     @on(Action.transaction_event)
     def on_transaction_event(self, **kwargs):
-        # kwargs: evse_id, connector_id, user_id, id_token, reservation_id, charging_schedules
-        print("Transaction event")
-        print(kwargs)
+        # kwargs: evse_id, connector_id, user_id, id_token, reservation_id, charging_schedules, start_time, end_time
         # TODO evse값 업데이트, transaction 컬렉션에 값 업데이트
         if kwargs["event_type"] == "Started":
+            logging.info("Transaction Started")
             transaction_collection.insert_one({
                 "stationId": self.charge_point_id,
                 "evseId": kwargs['custom_data']['evse_id'],
                 "connectorId": kwargs['custom_data']['connector_id'],
                 "userId": kwargs['custom_data']['user_id'],
                 "idToken": kwargs['custom_data']['id_token'],
-                "transactionId": "None",
+                "reservationId": ObjectId(kwargs['custom_data']['reservation_id']),
                 "startTime":datetime.fromisoformat(kwargs['custom_data']['start_time']),
                 "endTime":datetime.fromisoformat(kwargs['custom_data']['end_time']),
-                "energyWh": "10000",
-                "cost": 3100,
+                "energyWh": kwargs['custom_data']['energyWh'],
+                "cost": kwargs['custom_data']['cost'],
                 "transactionStatus":"CHARGING",
                 "startSchedule": datetime.now(),
                 "chargingProfileSnapshots": kwargs['custom_data']['charging_schedules']
@@ -171,11 +187,15 @@ class ChargePointHandler(cp):
             evse_collection.update_one(
                 {"evseId": kwargs['custom_data']["evse_id"]}, {"$set": {"evseStatus": "CHARGING"}})
         if kwargs["event_type"] == "Ended":
-            pass
-            #transaction_collection.update_one(
-            #    {"reservation_id":kwargs["reservation_id"]},{"$set":{"transactionStatus":"COMPLETE"}})
-        if kwargs["event_type"] == "Update":
-            pass
+            logging.info("Transaction Ended")
+            transaction_collection.update_one(
+                {"reservationId":ObjectId(kwargs['custom_data']["reservation_id"])},{"$set":{"transactionStatus":"COMPLETED"}})
+            reservation_collection.update_one(
+                {"_id":ObjectId(kwargs['custom_data']["reservation_id"])},{"$set":{"reservationStatus":"COMPLETED"}}
+            )
+            evse_collection.update_one(
+                {"evseId": kwargs['custom_data']['evse_id']}, {"$set": {"evseStatus": "AVAILABLE"}}
+            )
         return call_result.TransactionEvent()
 
     @on(Action.notify_charging_limit)

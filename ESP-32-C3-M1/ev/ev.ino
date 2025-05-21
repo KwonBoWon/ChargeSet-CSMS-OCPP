@@ -23,7 +23,8 @@ void setup() {
 
   M5.Lcd.setCursor(30, 50);
   M5.Lcd.printf("Waiting");
-  Serial.println("token-3456");
+  
+  Serial.println("token-6789");
 
   startTime = millis();
 }
@@ -49,8 +50,7 @@ void parseScheduleJson(String json) {
   StaticJsonDocument<512> doc;
   DeserializationError err = deserializeJson(doc, json);
   if (err) {
-    Serial.print("JSON Error: ");
-    Serial.println(err.c_str());
+    //Serial.println(err.c_str());
     return;
   }
 
@@ -58,23 +58,17 @@ void parseScheduleJson(String json) {
   scheduleCount = 0;
   for (JsonObject obj : arr) {
     if (scheduleCount >= 10) break;
-    schedules[scheduleCount].startPeriod = obj["startPeriod"];
+    schedules[scheduleCount].startPeriod = obj["start_period"];
     schedules[scheduleCount].limit = obj["limit"];
-    schedules[scheduleCount].useESS = obj["useESS"];
+    schedules[scheduleCount].useESS = obj["use_eSS"];
     scheduleCount++;
   }
-
-  Serial.printf("Loaded %d schedules\n", scheduleCount);
 }
 
 void loop() {
   if (Serial.available()) {
-    Serial.println("token-6789");
     String json = Serial.readStringUntil('\n');
     json.trim();
-    Serial.println("Response JSON:");
-    Serial.println(json);
-
     parseScheduleJson(json);
     startTime = millis();  // 타이머 초기화
   }
