@@ -167,7 +167,7 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
     _end_time = authorzie_response.custom_data['end_time']
     _reservation_id = authorzie_response.custom_data['reservation_id']
     _cost = authorzie_response.custom_data['cost']
-    _energyWh = authorzie_response.custom_data['energyWh']
+    _energyWh = authorzie_response.custom_data['targetEnergyWh']
 
     # 스케쥴 전송
     response = {
