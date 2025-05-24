@@ -7,31 +7,14 @@ import os
 
 candidates = []
 
-def get_usb_port_id(device):
-    """
-    /dev/ttyACM0 → /sys/class/tty/ttyACM0/device → realpath → 경로에서 USB 포트 ID (예: 1-1.3) 추출
-    """
-    try:
-        basename = os.path.basename(device)
-        realpath = os.path.realpath(f"/sys/class/tty/{basename}/device")
-        segments = realpath.split('/')
-        for segment in segments:
-            if segment.startswith('1-'):  # 라즈베리파이 USB 허브 포트 패턴
-                return segment
-    except Exception as e:
-        return f"unknown({e})"
-    return "unknown"
-
-
 class ESP32Protocol(asyncio.Protocol):
     def __init__(self, port):
         self.buffer = ""
         self.port = port
-        self.port_id = get_usb_port_id(port.device)
 
     def connection_made(self, transport):
         self.transport = transport
-        print(f"ESP{self.port.device} 연결됨 (포트 ID: {self.port_id}), HWID:{self.port.hwid}")
+        print(f"ESP{self.port.device} 연결됨, HWID:{self.port.hwid.LOCATION}")
 
     def data_received(self, data):
         self.buffer += data.decode()
