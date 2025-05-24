@@ -4,17 +4,23 @@ import serial.tools.list_ports
 import json
 import platform
 import os
+import re
 
 candidates = []
+
+def extract_port_number(location: str) -> str:
+    match = re.search(r'\d-\d\.(\d):\d', location)
+    return match.group(1) if match else "?"
 
 class ESP32Protocol(asyncio.Protocol):
     def __init__(self, port):
         self.buffer = ""
         self.port = port
+        self.portNumber = extract_port_number(port.location)
 
     def connection_made(self, transport):
         self.transport = transport
-        print(f"ESP{self.port.device} 연결됨, HWID:{self.port.hwid.location}")
+        print(f"ESP{self.port.device} 연결됨, PortNumber:{self.portNumber}")
 
     def data_received(self, data):
         self.buffer += data.decode()
