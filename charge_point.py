@@ -7,6 +7,7 @@ import serial.tools.list_ports
 import json
 import platform
 import logging
+import re
 
 from ocpp.v201 import ChargePoint as CP
 from ocpp.v201 import call, call_result
@@ -22,6 +23,9 @@ from ocpp.v201.enums import (
     GenericStatusEnumType,
     Iso15118EVCertificateStatusEnumType
 )
+def extract_port_number(location: str) -> str:
+    match = re.search(r'\d-\d\.(\d):\d', location)
+    return match.group(1) if match else "?"
 
 candidates = [] # 현재 usb 포트
 
@@ -146,15 +150,31 @@ class ChargePoint201(CP):
             custom_data=_custom_data
         )
 
-        response = await self.call(request)
-        logging.info(f"Send a Transaction Ended: {request.event_type}")
-        logging.info(f"Received a Transaction Ended")
+async def cost_updated(self, reservation_id: str = "tx-001", _total_cost: float = 222):
+    _custom_data: Dict[str, Any] = {
+        "vendorId": "ChargeSet",  # 필수 필드를 추가
+        "reservationId": reservation_id,
+    }
+    request = call.CostUpdated(
+        total_cost=_total_cost,
+        transaction_id="tx-001",
+        custom_data=_custom_data
+    )
+    response = await self.call(request)
+    logging.info(f"Send a CostUpdated: {request.total_cost}")
 
 async def run_cp(cp):
     try:
         await cp.start()
     except websockets.exceptions.ConnectionClosedOK:
         logging.info("Disconnected from CSMS. Shutting down ChargePointManager.")
+
+async def sleep_in_chunks(total_duration, chunk_size=10):
+    remaining = total_duration
+    while remaining > 0:
+        sleep_time = min(chunk_size, remaining)
+        await asyncio.sleep(sleep_time)
+        remaining -= sleep_time
 
 async def authorize_transaction_manager(cp, id_token: str = "token-1234", transport=None):
     authorzie_response = await cp.send_authorize(id_token)
@@ -185,12 +205,27 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
         _cost, _energyWh
     )
     last_period = 0
+    last_limit = 0
+    now_cost = 0.0
     for charging_schedule in _charging_schedules:
         charging_period=charging_schedule["start_period"]
         charging_limit=charging_schedule["limit"]
         if charging_period != 0:
-            await asyncio.sleep(charging_period-last_period)
+            remaining = charging_period-last_period
+            while remaining > 0:
+                sleep_time = min(10, remaining)
+                await asyncio.sleep(sleep_time)
+                remaining -= sleep_time
+
+                if last_limit >= 60000:
+                    now_cost += sleep_time * 60
+                else:
+                    now_cost += sleep_time * 5
+
+                await cp.cost_updated(_reservation_id, now_cost)
+            #await asyncio.sleep(charging_period-last_period)
             last_period=charging_period
+            last_limit=charging_limit
             if charging_limit == 0:
                 await cp.stop_transaction(
                     "tx-001", "EVDisconnected", _evse_id, _connector_id, _reservation_id, _id_token
@@ -202,10 +237,12 @@ class ESP32Protocol(asyncio.Protocol):
         self.buffer = ""
         self.port = port
         self.cp = cp
+        self.portNumber = extract_port_number(port.location)
 
     def connection_made(self, transport):
         self.transport = transport
-        logging.info(f"[EV] {self.port.device} connected")
+        logging.info(f"[EV] {self.port.device} connected, PortNumber:{self.portNumber}")
+        # TODO: 커넥터 아이디(혹은 evseID) 넘겨서(혹은 예약데이터랑 비교해서) 예외처리
 
     def data_received(self, data):
         self.buffer += data.decode()

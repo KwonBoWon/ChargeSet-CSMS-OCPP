@@ -199,6 +199,10 @@ class ChargePointHandler(cp):
             )
         return call_result.TransactionEvent()
 
+    @on(Action.cost_updated)
+    def on_cost_updated(self, **kwargs):
+        return call_result.CostUpdated()
+
     @on(Action.notify_charging_limit)
     def on_notify_charging_limit(self, **kwargs):
         return call_result.NotifyChargingLimit()
