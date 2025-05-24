@@ -179,7 +179,7 @@ class ChargePointHandler(cp):
                 "reservationId": ObjectId(kwargs['custom_data']['reservation_id']),
                 "startTime":datetime.fromisoformat(kwargs['custom_data']['start_time']),
                 "endTime":datetime.fromisoformat(kwargs['custom_data']['end_time']),
-                "energyWh": kwargs['custom_data']['energyWh'],
+                "energyWh": kwargs['custom_data']['energy_wh'],
                 "cost": kwargs['custom_data']['cost'],
                 "transactionStatus":"CHARGING",
                 "startSchedule": datetime.now(),
