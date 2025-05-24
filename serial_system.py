@@ -31,7 +31,7 @@ class ESP32Protocol(asyncio.Protocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        print(f"ESP{self.port.device} 연결됨 (포트 ID: {self.port_id})")
+        print(f"ESP{self.port.device} 연결됨 (포트 ID: {self.port_id}), HWID:{self.port.hwid}")
 
     def data_received(self, data):
         self.buffer += data.decode()
