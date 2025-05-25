@@ -167,7 +167,6 @@ class ChargePointHandler(cp):
     @on(Action.transaction_event)
     def on_transaction_event(self, **kwargs):
         # kwargs: evse_id, connector_id, user_id, id_token, reservation_id, charging_schedules, start_time, end_time
-        # TODO evse값 업데이트, transaction 컬렉션에 값 업데이트
         if kwargs["event_type"] == "Started":
             logging.info("Transaction Started")
             transaction_collection.insert_one({
@@ -179,8 +178,8 @@ class ChargePointHandler(cp):
                 "reservationId": ObjectId(kwargs['custom_data']['reservation_id']),
                 "startTime":datetime.fromisoformat(kwargs['custom_data']['start_time']),
                 "endTime":datetime.fromisoformat(kwargs['custom_data']['end_time']),
-                "energyWh": kwargs['custom_data']['energy_wh'],
-                "cost": kwargs['custom_data']['cost'],
+                "energyWh": 0,
+                "cost": 0,
                 "transactionStatus":"CHARGING",
                 "startSchedule": datetime.now(),
                 "chargingProfileSnapshots": kwargs['custom_data']['charging_schedules']
@@ -201,6 +200,11 @@ class ChargePointHandler(cp):
 
     @on(Action.cost_updated)
     def on_cost_updated(self, **kwargs):
+        logging.info(f"Cost Updated: {kwargs['total_cost']}")
+        logging.info(f"Energy Updated: {kwargs['custom_data']['total_energy']}")
+        transaction_collection.update_one(
+            {"reservationId": ObjectId(kwargs['custom_data']["reservation_id"])},
+            {"$set": {"cost": int(kwargs['total_cost']), "energyWh": int(kwargs['custom_data']['total_energy'])}})
         return call_result.CostUpdated()
 
     @on(Action.notify_charging_limit)

@@ -149,19 +149,29 @@ class ChargePoint201(CP):
             evse={"id": _connector_id, "connector_id": _connector_id},
             custom_data=_custom_data
         )
+        response = await self.call(request)
+        logging.info(f"Send a Transaction Ended: {request.event_type}")
+        logging.info(f"Received a Transaction Ended")
 
-async def cost_updated(self, reservation_id: str = "tx-001", _total_cost: float = 222):
-    _custom_data: Dict[str, Any] = {
-        "vendorId": "ChargeSet",  # 필수 필드를 추가
-        "reservationId": reservation_id,
-    }
-    request = call.CostUpdated(
-        total_cost=_total_cost,
-        transaction_id="tx-001",
-        custom_data=_custom_data
-    )
-    response = await self.call(request)
-    logging.info(f"Send a CostUpdated: {request.total_cost}")
+
+    async def cost_energy_updated(
+            self, reservation_id: str = "tx-001",
+            _total_cost: float = 222, _total_energy:float = 22
+    ):
+        logging.info(f"Cost Updated: {_total_cost} KRW")
+        logging.info(f"Energy Updated: {_total_energy} Wh")
+        _custom_data: Dict[str, Any] = {
+            "vendorId": "ChargeSet",  # 필수 필드를 추가
+            "reservationId": reservation_id,
+            "totalEnergy": _total_energy,
+        }
+        request = call.CostUpdated(
+            total_cost=_total_cost,
+            transaction_id="tx-001",
+            custom_data=_custom_data
+        )
+        response = await self.call(request)
+        logging.info(f"Send a CostUpdated: {request.total_cost}")
 
 async def run_cp(cp):
     try:
@@ -207,23 +217,25 @@ async def authorize_transaction_manager(cp, id_token: str = "token-1234", transp
     last_period = 0
     last_limit = 0
     now_cost = 0.0
+    now_energy = 0.0
     for charging_schedule in _charging_schedules:
         charging_period=charging_schedule["start_period"]
         charging_limit=charging_schedule["limit"]
         if charging_period != 0:
             remaining = charging_period-last_period
             while remaining > 0:
-                sleep_time = min(10, remaining)
+                sleep_time = min(12, remaining)
                 await asyncio.sleep(sleep_time)
                 remaining -= sleep_time
-
                 if last_limit >= 60000:
-                    now_cost += sleep_time * 60
+                    now_cost += 72
+                    now_energy += 200
                 else:
-                    now_cost += sleep_time * 5
+                    now_cost += 6
+                    now_energy += 20
 
-                await cp.cost_updated(_reservation_id, now_cost)
-            #await asyncio.sleep(charging_period-last_period)
+                await cp.cost_energy_updated(_reservation_id, now_cost, now_energy)
+
             last_period=charging_period
             last_limit=charging_limit
             if charging_limit == 0:
@@ -302,7 +314,6 @@ async def main(*args, **kwargs):
         charge_point_manager(uri + "ST-001", "ST-001"),
         #charge_point_manager(uri + "ST-002", "ST-002"),
     )
-# TODO 1분마다 데이터 최신화
 
 if __name__ == "__main__":
     asyncio.run(main())
