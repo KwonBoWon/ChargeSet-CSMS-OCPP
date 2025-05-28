@@ -191,7 +191,10 @@ async def sleep_in_chunks(total_duration, chunk_size=10):
 async def authorize_transaction_manager(cp, id_token: str = "token-1234", transport=None):
     authorzie_response = await cp.send_authorize(id_token)
 
-    if authorzie_response.id_token_info['status'] is not "Accepted":
+    print(authorzie_response.id_token_info['status'])
+    print(AuthorizationStatusEnumType.accepted)
+    print(authorzie_response.id_token_info['status'] == AuthorizationStatusEnumType.accepted)
+    if authorzie_response.id_token_info['status'] != AuthorizationStatusEnumType.accepted:
         logging.error(f"Authorize Failed: {authorzie_response.id_token_info['status']}")
         # 에러 전송
         response = {
