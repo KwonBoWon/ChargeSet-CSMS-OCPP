@@ -1,6 +1,8 @@
 pymongo_test.py
 config.txt
 websockets_test/
+serial_system.py
+/ESP-32-C3-M1/
 .env
 venv/
 log.txt

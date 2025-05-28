@@ -1,13 +1,6 @@
-from fastapi import FastAPI
+# main.py (간단한 예)
+def main():
+    print("FastAPI 제거하고 일반 파이썬으로 시작!")
 
-app = FastAPI()
-
-
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
+if __name__ == "__main__":
+    main()
