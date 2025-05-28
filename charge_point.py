@@ -8,7 +8,9 @@ import json
 import platform
 import logging
 import re
+import os
 
+from dotenv import load_dotenv
 from ocpp.v201 import ChargePoint as CP
 from ocpp.v201 import call, call_result
 from ocpp.routing import on
@@ -309,7 +311,10 @@ async def charge_point_manager(uri, cp_name):
         await find_esp32_port(cp)
 
 async def main(*args, **kwargs):
-    uri = "ws://192.168.35.95:9000/"
+    load_dotenv()
+    uri = os.getenv("CSMS_URI")
+
+    #uri = "ws://192.168.35.95:9000/"
     await asyncio.gather(
         charge_point_manager(uri + "ST-001", "ST-001"),
         #charge_point_manager(uri + "ST-002", "ST-002"),

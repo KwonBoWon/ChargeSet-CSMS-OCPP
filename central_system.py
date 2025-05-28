@@ -9,7 +9,7 @@ from bson import ObjectId
 from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional
 
-
+from ocpp.charge_point import snake_to_camel_case
 from ocpp.routing import on
 from ocpp.v201 import ChargePoint as cp
 from ocpp.v201 import call, call_result
@@ -169,6 +169,9 @@ class ChargePointHandler(cp):
         # kwargs: evse_id, connector_id, user_id, id_token, reservation_id, charging_schedules, start_time, end_time
         if kwargs["event_type"] == "Started":
             logging.info("Transaction Started")
+
+            print(snake_to_camel_case(['custom_data']['charging_schedules']))
+
             transaction_collection.insert_one({
                 "stationId": self.charge_point_id,
                 "evseId": kwargs['custom_data']['evse_id'],
@@ -182,7 +185,7 @@ class ChargePointHandler(cp):
                 "cost": 0,
                 "transactionStatus":"CHARGING",
                 "startSchedule": datetime.now(),
-                "chargingProfileSnapshots": kwargs['custom_data']['charging_schedules']
+                "chargingProfileSnapshots": snake_to_camel_case(['custom_data']['charging_schedules'])
             })
             evse_collection.update_one(
                 {"evseId": kwargs['custom_data']["evse_id"]}, {"$set": {"evseStatus": "CHARGING"}})
