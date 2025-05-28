@@ -28,7 +28,7 @@ doc1 = {
     "endTime": end,
     "targetEnergyWh": 1200,
     "cost": 420,
-    "reservationStatus": "ACTIVATE",
+    "reservationStatus": "ACTIVE",
     "createdAt": now
 }
 result = reservation_collection.insert_one(doc1)
@@ -42,24 +42,20 @@ doc2 = {
   "chargingSchedules": [
     {
       "startPeriod": 0,
-      "limit": 30000,
+      "limit": 6000,
       "useESS": False
     },
     {
-      "startPeriod": 60,
-      "limit": 60000,
-      "useESS": True
-    },
-    {
       "startPeriod": 120,
-      "limit": 30000,
+      "limit": 60000,
       "useESS": True
     },
     {
       "startPeriod": 180,
       "limit": 0,
-      "useESS": True
-    }
+      "useESS": False
+    },
+
   ]
 }
 

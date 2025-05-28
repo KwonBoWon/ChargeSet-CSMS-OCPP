@@ -190,6 +190,20 @@ async def sleep_in_chunks(total_duration, chunk_size=10):
 
 async def authorize_transaction_manager(cp, id_token: str = "token-1234", transport=None):
     authorzie_response = await cp.send_authorize(id_token)
+
+    print(f"Auth response :{authorzie_response}")
+    if authorzie_response.status is not AuthorizationStatusEnumType.accepted:
+        logging.error(f"Authorize Failed: {authorzie_response.id_token}, Reason: {authorzie_response.status}")
+        # 에러 전송
+        response = {
+            "error": authorzie_response.status
+        }
+        json_str = json.dumps(response) + "\n"
+        transport.write(json_str.encode())
+        return
+
+
+
     _charging_schedules = authorzie_response.custom_data["charging_schedules"]
     _evse_id = authorzie_response.custom_data['evse_id']
     _user_id = authorzie_response.custom_data['user_id']

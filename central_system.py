@@ -107,33 +107,40 @@ class ChargePointHandler(cp):
 
         if reservation_data is None:
             logging.ERROR("Reservation not found")
-            call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.no_credit))
-            return call_result_authorize
-        # TODO: 충전소 위치 확인, 커넥터 확인, 스타트타임 확인 -> 업데이트 해줘야함(예약시간 지남)
-
+            call_result_authorize = call_result.Authorize(
+                id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.no_credit))
+            print(f"> call_result_authorize : {call_result_authorize}")
+            return call_result_authorizeg
 
         match reservation_data["reservationStatus"]:
             case "ACTIVE": # "ACTIVE" -	현재 유효한 예약. 아직 예약된 시간이 아님 (예약을 생성하면 ACTIVE 상태)
                 logging.info("Reservation Found")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.not_at_this_time))
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.accepted))
             case "WAITING": # “WAITING”-	예약된 시간이 되었지만 아직 연결하지 않음(기다려주는 시간 10분이 지나지 않음)
                 logging.info("reservation waiting-accepted")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.accepted))
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.accepted))
             case "ONGOING": # "ONGOING" -	예약 시간에 도달했고, 예약자 본인이 충전 중임
                 logging.info("reservation ongoing")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.concurrent_tx))
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.not_at_this_time))
             case "EXPIRED": # "EXPIRED" -	예약 시간이 지났고, 실제 사용(충전)을 하지 않음 (노쇼)
                 logging.info("reservation expired")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.expired))
-            case "COMPLETED": # "COMPLETED" -	예약자가 충전을 정상적으로 수행했고, 충전이 완료됨
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.expired))
+            case "COMPLETED": # "COMPLETED" -	예약자가 충전을 정상적으로 수행했고, 이미 완료됨
                 logging.info("reservation completed")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.concurrent_tx))
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.blocked))
             case "CANCELLED": # "CANCELLED" -	사용자가 직접 예약을 취소함
                 logging.info("reservation cancelled")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.invalid))
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.invalid))
             case _: # 그외 값
                 logging.info("unknown error")
-                call_result_authorize = call_result.Authorize(id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.unknown))
+                call_result_authorize = call_result.Authorize(
+                    id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.unknown))
 
 
         reservation_id = str(reservation_data["_id"])  # 예약 id
