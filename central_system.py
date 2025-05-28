@@ -106,7 +106,7 @@ class ChargePointHandler(cp):
         if reservation_data is None:
             logging.error("Reservation not found")
             call_result_authorize = call_result.Authorize(
-                id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.no_credit))
+                id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.invalid))
             print(f"> call_result_authorize : {call_result_authorize}")
             return call_result_authorize
 
