@@ -170,7 +170,7 @@ class ChargePointHandler(cp):
         if kwargs["event_type"] == "Started":
             logging.info("Transaction Started")
 
-            print(snake_to_camel_case(['custom_data']['charging_schedules']))
+            print(snake_to_camel_case(kwargs['custom_data']['charging_schedules']))
 
             transaction_collection.insert_one({
                 "stationId": self.charge_point_id,
@@ -185,7 +185,7 @@ class ChargePointHandler(cp):
                 "cost": 0,
                 "transactionStatus":"CHARGING",
                 "startSchedule": datetime.now(),
-                "chargingProfileSnapshots": snake_to_camel_case(['custom_data']['charging_schedules'])
+                "chargingProfileSnapshots": snake_to_camel_case(kwargs['custom_data']['charging_schedules'])
             })
             evse_collection.update_one(
                 {"evseId": kwargs['custom_data']["evse_id"]}, {"$set": {"evseStatus": "CHARGING"}})
