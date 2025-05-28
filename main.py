@@ -1,6 +1,6 @@
 # main.py (간단한 예)
 def main():
-    print("FastAPI 제거하고 일반 파이썬으로 시작!")
+    print("ChargeSet!")
 
 if __name__ == "__main__":
     main()
