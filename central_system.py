@@ -100,17 +100,15 @@ class ChargePointHandler(cp):
         logging.info("Received a Authorize")
 
         authorize_id_token = kwargs["id_token"]["id_token"]
-
-        #print(f"> Auth : {authorize_id_token['evseId'], authorize_id_token['connectorId'], authorize_id_token['userId']}")
         reservation_data = reservation_collection.find_one({"idToken": authorize_id_token, "reservationStatus": "ACTIVE"})
         print(f"> Auth : {reservation_data}")
 
         if reservation_data is None:
-            logging.ERROR("Reservation not found")
+            logging.error("Reservation not found")
             call_result_authorize = call_result.Authorize(
                 id_token_info=IdTokenInfoType(status=AuthorizationStatusEnumType.no_credit))
             print(f"> call_result_authorize : {call_result_authorize}")
-            return call_result_authorizeg
+            return call_result_authorize
 
         match reservation_data["reservationStatus"]:
             case "ACTIVE": # "ACTIVE" -	현재 유효한 예약. 아직 예약된 시간이 아님 (예약을 생성하면 ACTIVE 상태)
